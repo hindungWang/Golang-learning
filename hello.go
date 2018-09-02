@@ -61,10 +61,14 @@ func main() {
 	}
 
 	//panic(fmt.Sprintf("CubeRoot(%s) did not converge", a))
-
+	fmt.Println(test(3))
 }
 
 func init() {
 	fmt.Println("hhh")
 	fmt.Println(fmt.Sprint("d"))
+}
+
+func test(n int) (name int) {
+	return
 }

@@ -54,4 +54,20 @@ func main() {
 	fmt.Println("state:", state)
 	mutex.Unlock()
 
+	at := 0
+	for w := 0; w < 10; w++ {
+		go func() {
+			for i := 0; i < 10; i++ {
+
+				//mutex.Lock()
+				at++
+				//mutex.Unlock()
+				//atomic.AddUint64(&writeOps, 1)
+				//time.Sleep(time.Millisecond)
+			}
+		}()
+	}
+	time.Sleep(time.Second)
+	fmt.Println(at)
+
 }
