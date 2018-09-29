@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"syscall"
+	"time"
 )
 
 type pvDefine struct {
@@ -34,6 +35,26 @@ type Result struct {
 	Message string `json:"message"`
 }
 
+type PortStatus struct {
+	Status string `json:"status"`
+	Port   int64  `json:"port"`
+}
+
+type Port struct {
+	PortNum int64  `json:"portnum"`
+	Status  string `json:"status"`
+}
+type NetRespon struct {
+	Ip        string `json:"ip"`
+	Status    string `json:"status"`
+	PortOne   Port   `json:"portOne"`
+	PortTwo   Port   `json:"portTwo"`
+	PortThree Port   `json:"portThree"`
+}
+type IpList struct {
+	Iplist []NetRespon
+}
+
 var (
 	storage   resource.Quantity
 	diskFree  int64
@@ -42,6 +63,47 @@ var (
 	mountInfo = &v1.NFSVolumeSource{}
 )
 
+func (netRespon *NetRespon) netTest(c *http.Client) {
+	_, err := c.Get(fmt.Sprint("http://", netRespon.Ip, ":", netRespon.PortOne.PortNum))
+	var flag bool
+	if err != nil {
+		netRespon.PortOne.Status = "error"
+		flag = true
+	} else {
+		netRespon.PortOne.Status = "success"
+	}
+
+	_, err = c.Get(fmt.Sprint("http://", netRespon.Ip, ":", netRespon.PortTwo.PortNum))
+	if err != nil {
+		flag = true
+		netRespon.PortTwo.Status = "error"
+	} else {
+		netRespon.PortTwo.Status = "success"
+	}
+
+	_, err = c.Get(fmt.Sprint("http://", netRespon.Ip, ":", netRespon.PortThree.PortNum))
+	if err != nil {
+		flag = true
+		netRespon.PortThree.Status = "error"
+	} else {
+		netRespon.PortThree.Status = "success"
+	}
+	if flag == true {
+		netRespon.Status = "error"
+	} else {
+		netRespon.Status = "success"
+	}
+}
+func ipListNet(list IpList) (b []byte) {
+	c := &http.Client{
+		Timeout: 30 * time.Millisecond,
+	}
+	for i, _ := range list.Iplist {
+		list.Iplist[i].netTest(c)
+	}
+	b, _ = json.Marshal(list)
+	return
+}
 func DiskUsage(path string) (disk DiskStatus) {
 	fs := syscall.Statfs_t{}
 	err := syscall.Statfs(path, &fs)
@@ -52,22 +114,6 @@ func DiskUsage(path string) (disk DiskStatus) {
 	disk.Free = fs.Bfree * uint64(fs.Bsize)
 	disk.Used = disk.All - disk.Free
 	return
-}
-func checkStorage(w http.ResponseWriter, r *http.Request) {
-	diskFree = int64(DiskUsage(mountInfo.Path).Free)
-	result := Result{"success", ""}
-	if checkPermission() == 1 {
-		result.Status = "error"
-		result.Message = "No create permission"
-	} else if checkPermission() == 2 {
-		result.Status = "error"
-		result.Message = "No delete permission"
-	} else if storage.CmpInt64(diskFree) > 0 {
-		result.Status = "error"
-		result.Message = fmt.Sprintf("mounted volume storage to small,need %s", storage.String())
-	}
-	b, _ := json.Marshal(result)
-	w.Write([]byte(b))
 }
 func getPvInfo(pvFile string) {
 	var (
@@ -108,17 +154,91 @@ func checkPermission() (re int) {
 	}
 	return
 }
+func portResponOne(w http.ResponseWriter, r *http.Request) {
+	portStatus := PortStatus{
+		Status: "success",
+		Port:   80,
+	}
+	b, _ := json.Marshal(portStatus)
+	w.Write([]byte(b))
+}
+func portResponTwo(w http.ResponseWriter, r *http.Request) {
+	portStatus := PortStatus{
+		Status: "success",
+		Port:   53,
+	}
+	b, _ := json.Marshal(portStatus)
+	w.Write([]byte(b))
+}
+func portResponThree(w http.ResponseWriter, r *http.Request) {
+	portStatus := PortStatus{
+		Status: "success",
+		Port:   8800,
+	}
+	b, _ := json.Marshal(portStatus)
+	w.Write([]byte(b))
+}
+func checkStorage(w http.ResponseWriter, r *http.Request) {
+	diskFree = int64(DiskUsage(mountInfo.Path).Free)
+	result := Result{"success", ""}
+	if checkPermission() == 1 {
+		result.Status = "error"
+		result.Message = "No create permission"
+	} else if checkPermission() == 2 {
+		result.Status = "error"
+		result.Message = "No delete permission"
+	} else if storage.CmpInt64(diskFree) > 0 {
+		result.Status = "error"
+		result.Message = fmt.Sprintf("mounted volume storage too small,need %s", storage.String())
+	}
+	b, _ := json.Marshal(result)
+	w.Write([]byte(b))
+}
 func checkNetwork(w http.ResponseWriter, r *http.Request) {
-	//ping other pod ip
-
-	w.Write([]byte(fmt.Sprintf("hhh %s", "io")))
+	var iplist IpList
+	list := []string{
+		"192.168.99.100",
+		"192.168.99.101",
+		"192.168.99.102",
+	}
+	for _, ip := range list {
+		iplist.Iplist = append(iplist.Iplist, NetRespon{
+			Ip: ip,
+			PortOne: Port{
+				PortNum: 53,
+			},
+			PortTwo: Port{
+				PortNum: 80,
+			},
+			PortThree: Port{
+				PortNum: 8800,
+			},
+		})
+	}
+	b := ipListNet(iplist)
+	w.Write(b)
 }
 func main() {
+	go func() {
+		mux := http.NewServeMux()
+		mux.HandleFunc("/", portResponOne)
+		http.ListenAndServe(":80", mux)
+	}()
+	go func() {
+		mux := http.NewServeMux()
+		mux.HandleFunc("/", portResponTwo)
+		http.ListenAndServe(":53", mux)
+	}()
+	go func() {
+		mux := http.NewServeMux()
+		mux.HandleFunc("/", portResponThree)
+		http.ListenAndServe(":8800", mux)
+	}()
 	getPvInfo("pv.yaml")
-	http.HandleFunc("/do", checkStorage)
 	http.HandleFunc("/net", checkNetwork)
+	http.HandleFunc("/do", checkStorage)
 	err := http.ListenAndServe(":9090", nil)
 	if err != nil {
-		log.Error("ListenAndServe: ")
+		log.Error("ListenAndServe")
 	}
 }
