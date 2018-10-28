@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: go-server
+  labels:
+    app: go-server
+spec:
+  containers:
+  - image: tylhxd/goserver
+    imagePullPolicy: Always
+    name: mygo
+    ports:
+    - containerPort: 80
+    - containerPort: 53
