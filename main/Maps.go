@@ -1,17 +1,23 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"unsafe"
+)
 
 func main()  {
 	m := make(map[string]int)
 
 	m["k1"] = 7
 	m["k2"] = 13
+	m["k3"] = 13
 
 	fmt.Println("map", m)
 
+	fmt.Println("map size: ", unsafe.Sizeof(m))
+
 	//遍历
-	for k, v := range m{
+	for k, v := range m {
 		fmt.Printf("%s -> %d \n", k, v)
 	}
 
